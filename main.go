@@ -3,27 +3,33 @@ package main
 import (
 	"os"
 	"os/exec"
+	"path"
 	"syscall"
+
+	flag "github.com/spf13/pflag"
+	"golang.org/x/sys/unix"
 )
 
 func main() {
+	rootFS := flag.String("rootfs", "", "root filesystem path")
+	isChild := flag.Bool("child", false, "execute child process")
+	flag.Parse()
+	args := flag.Args()
+
 	var exitCode int
 
-	switch os.Args[1] {
-	case "run":
+	if *isChild {
+		exitCode = child(*rootFS, args)
+	} else {
 		exitCode = parent()
-	case "child":
-		exitCode = child()
-	default:
-		panic("wat should I do")
 	}
 	os.Exit(exitCode)
 }
 
 func parent() int {
-	cmd := exec.Command("/proc/self/exe", append([]string{"child"}, os.Args[2:]...)...)
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Cloneflags: syscall.CLONE_NEWUTS,
+	cmd := exec.Command("/proc/self/exe", append([]string{"--child"}, os.Args[1:]...)...)
+	cmd.SysProcAttr = &unix.SysProcAttr{
+		Cloneflags: unix.CLONE_NEWUTS | unix.CLONE_NEWNS,
 	}
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
@@ -33,8 +39,11 @@ func parent() int {
 	return getExitCode(cmd)
 }
 
-func child() int {
-	cmd := exec.Command(os.Args[2], os.Args[3:]...)
+func child(rootFS string, args []string) int {
+	if rootFS != "" {
+		pivotRoot(rootFS)
+	}
+	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -52,4 +61,20 @@ func getExitCode(cmd *exec.Cmd) int {
 		exitCode = status.ExitStatus()
 	}
 	return exitCode
+}
+
+func pivotRoot(rootFS string) {
+	oldDir := path.Join(rootFS, "old")
+	must(unix.Mount(rootFS, rootFS, "", unix.MS_BIND, ""))
+	must(unix.Mount("", rootFS, "", unix.MS_PRIVATE, ""))
+	must(unix.Mount(rootFS, rootFS, "", unix.MS_BIND, ""))
+	must(os.MkdirAll(oldDir, 0700))
+	must(unix.PivotRoot(rootFS, oldDir))
+	must(os.Chdir("/"))
+}
+
+func must(err error) {
+	if err != nil {
+		panic(err)
+	}
 }
