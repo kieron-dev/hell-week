@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+	"io/ioutil"
 	"os"
 	"os/exec"
 	"path"
@@ -12,6 +14,7 @@ import (
 
 func main() {
 	rootFS := flag.String("rootfs", "", "root filesystem path")
+	cgroup := flag.String("cgroup", "", "cgroup")
 	isChild := flag.Bool("child", false, "execute child process")
 	flag.Parse()
 	args := flag.Args()
@@ -21,12 +24,15 @@ func main() {
 	if *isChild {
 		exitCode = child(*rootFS, args)
 	} else {
-		exitCode = parent()
+		exitCode = parent(*cgroup)
 	}
 	os.Exit(exitCode)
 }
 
-func parent() int {
+func parent(cgroup string) int {
+	if cgroup != "" {
+		addSelfToCgroup(cgroup)
+	}
 	cmd := exec.Command("/proc/self/exe", append([]string{"--child"}, os.Args[1:]...)...)
 	cmd.SysProcAttr = &unix.SysProcAttr{
 		Cloneflags: unix.CLONE_NEWUTS | unix.CLONE_NEWNS,
@@ -71,6 +77,14 @@ func pivotRoot(rootFS string) {
 	must(os.MkdirAll(oldDir, 0700))
 	must(unix.PivotRoot(rootFS, oldDir))
 	must(os.Chdir("/"))
+}
+
+func addSelfToCgroup(cgroup string) {
+	cgroupDir := path.Join("/sys/fs/cgroup/cpuset", cgroup)
+	must(os.MkdirAll(cgroupDir, 0700))
+	must(ioutil.WriteFile(path.Join(cgroupDir, "cpuset.cpus"), []byte("0"), 0644))
+	must(ioutil.WriteFile(path.Join(cgroupDir, "cpuset.mems"), []byte("0"), 0644))
+	must(ioutil.WriteFile(path.Join(cgroupDir, "tasks"), []byte(fmt.Sprintf("%d", os.Getpid())), 0644))
 }
 
 func must(err error) {
