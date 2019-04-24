@@ -1,4 +1,4 @@
-module github.com/kieron-pivotal/container-run
+module github.com/kieron-pivotal/hell-week
 
 go 1.12
 
