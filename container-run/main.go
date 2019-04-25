@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"strings"
 	"syscall"
 
 	flag "github.com/spf13/pflag"
@@ -80,11 +81,17 @@ func pivotRoot(rootFS string) {
 }
 
 func addSelfToCgroup(cgroup string) {
-	cgroupDir := path.Join("/sys/fs/cgroup/cpuset", cgroup)
+	cgroupDir := path.Join("/sys/fs/cgroup", cgroup)
 	must(os.MkdirAll(cgroupDir, 0700))
+	if strings.HasPrefix(cgroup, "cpuset") {
+		populateCPUSetDefaults(cgroupDir)
+	}
+	must(ioutil.WriteFile(path.Join(cgroupDir, "tasks"), []byte(fmt.Sprintf("%d", os.Getpid())), 0644))
+}
+
+func populateCPUSetDefaults(cgroupDir string) {
 	must(ioutil.WriteFile(path.Join(cgroupDir, "cpuset.cpus"), []byte("0"), 0644))
 	must(ioutil.WriteFile(path.Join(cgroupDir, "cpuset.mems"), []byte("0"), 0644))
-	must(ioutil.WriteFile(path.Join(cgroupDir, "tasks"), []byte(fmt.Sprintf("%d", os.Getpid())), 0644))
 }
 
 func must(err error) {
