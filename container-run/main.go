@@ -125,8 +125,7 @@ func mountVolume(volume, oldDir string) {
 
 func mkDev(oldDir string) {
 	must(os.MkdirAll("/dev", 0755))
-	oldDev := path.Join(oldDir, "dev")
-	must(unix.Mount(oldDev, "/dev", "", unix.MS_BIND, ""))
+	must(unix.Mount("devtmpfs", "/dev", "devtmpfs", 0, ""))
 }
 
 func addSelfToCgroup(cgroup string) {
