@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path"
 	"strings"
 	"syscall"
@@ -32,6 +33,9 @@ func main() {
 }
 
 func parent(cgroup string) int {
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs)
+
 	if cgroup != "" {
 		addSelfToCgroup(cgroup)
 	}
@@ -43,11 +47,19 @@ func parent(cgroup string) int {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
+	go func() {
+		sig := <-sigs
+		cmd.Process.Signal(sig)
+	}()
+
 	cmd.Run()
 	return getExitCode(cmd)
 }
 
 func child(rootFS string, volume string, args []string) int {
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs)
+
 	oldDir := "/"
 	if rootFS != "" {
 		oldDir = pivotRoot(rootFS)
@@ -60,6 +72,11 @@ func child(rootFS string, volume string, args []string) int {
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+
+	go func() {
+		sig := <-sigs
+		cmd.Process.Signal(sig)
+	}()
 
 	cmd.Run()
 	return getExitCode(cmd)
