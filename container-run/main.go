@@ -16,6 +16,7 @@ import (
 func main() {
 	rootFS := flag.String("rootfs", "", "root filesystem path")
 	cgroup := flag.String("cgroup", "", "cgroup")
+	volume := flag.String("volume", "", "<local-path>:<container-path>")
 	isChild := flag.Bool("child", false, "execute child process")
 	flag.Parse()
 	args := flag.Args()
@@ -23,7 +24,7 @@ func main() {
 	var exitCode int
 
 	if *isChild {
-		exitCode = child(*rootFS, args)
+		exitCode = child(*rootFS, *volume, args)
 	} else {
 		exitCode = parent(*cgroup)
 	}
@@ -46,10 +47,14 @@ func parent(cgroup string) int {
 	return getExitCode(cmd)
 }
 
-func child(rootFS string, args []string) int {
+func child(rootFS string, volume string, args []string) int {
+	oldDir := "/"
 	if rootFS != "" {
-		pivotRoot(rootFS)
+		oldDir = pivotRoot(rootFS)
 		mountProc()
+	}
+	if volume != "" {
+		mountVolume(volume, oldDir)
 	}
 	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Stdin = os.Stdin
@@ -71,19 +76,33 @@ func getExitCode(cmd *exec.Cmd) int {
 	return exitCode
 }
 
-func pivotRoot(rootFS string) {
-	oldDir := path.Join(rootFS, "old")
+func pivotRoot(rootFS string) string {
+	old := "/old"
+	oldDir := path.Join(rootFS, old)
 	must(unix.Mount(rootFS, rootFS, "", unix.MS_BIND, ""))
 	must(unix.Mount("", rootFS, "", unix.MS_PRIVATE, ""))
 	must(unix.Mount(rootFS, rootFS, "", unix.MS_BIND, ""))
 	must(os.MkdirAll(oldDir, 0700))
 	must(unix.PivotRoot(rootFS, oldDir))
 	must(os.Chdir("/"))
+	return old
 }
 
 func mountProc() {
 	must(os.MkdirAll("/proc", 0755))
 	must(unix.Mount("proc", "/proc", "proc", 0, ""))
+}
+
+func mountVolume(volume, oldDir string) {
+	parts := strings.Split(volume, ":")
+	if len(parts) != 2 {
+		panic("can't parse volume param")
+	}
+	source, target := parts[0], parts[1]
+	source = path.Join(oldDir, source)
+	mustExist(source)
+	must(os.MkdirAll(target, 0755))
+	must(unix.Mount(source, target, "", unix.MS_BIND, ""))
 }
 
 func addSelfToCgroup(cgroup string) {
@@ -103,5 +122,13 @@ func populateCPUSetDefaults(cgroupDir string) {
 func must(err error) {
 	if err != nil {
 		panic(err)
+	}
+}
+
+func mustExist(path string) {
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		if err != nil {
+			panic(err)
+		}
 	}
 }
