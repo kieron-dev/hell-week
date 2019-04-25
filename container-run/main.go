@@ -36,7 +36,7 @@ func parent(cgroup string) int {
 	}
 	cmd := exec.Command("/proc/self/exe", append([]string{"--child"}, os.Args[1:]...)...)
 	cmd.SysProcAttr = &unix.SysProcAttr{
-		Cloneflags: unix.CLONE_NEWUTS | unix.CLONE_NEWNS,
+		Cloneflags: unix.CLONE_NEWUTS | unix.CLONE_NEWNS | unix.CLONE_NEWPID,
 	}
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
@@ -49,6 +49,7 @@ func parent(cgroup string) int {
 func child(rootFS string, args []string) int {
 	if rootFS != "" {
 		pivotRoot(rootFS)
+		mountProc()
 	}
 	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Stdin = os.Stdin
@@ -78,6 +79,11 @@ func pivotRoot(rootFS string) {
 	must(os.MkdirAll(oldDir, 0700))
 	must(unix.PivotRoot(rootFS, oldDir))
 	must(os.Chdir("/"))
+}
+
+func mountProc() {
+	must(os.MkdirAll("/proc", 0755))
+	must(unix.Mount("proc", "/proc", "proc", 0, ""))
 }
 
 func addSelfToCgroup(cgroup string) {
