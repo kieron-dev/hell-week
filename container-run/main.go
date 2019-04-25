@@ -64,7 +64,7 @@ func child(rootFS string, volume string, args []string) int {
 	if rootFS != "" {
 		oldDir = pivotRoot(rootFS)
 		mountProc()
-		mkDev()
+		mkDev(oldDir)
 	}
 	if volume != "" {
 		mountVolume(volume, oldDir)
@@ -123,11 +123,10 @@ func mountVolume(volume, oldDir string) {
 	must(unix.Mount(source, target, "", unix.MS_BIND, ""))
 }
 
-func mkDev() {
+func mkDev(oldDir string) {
 	must(os.MkdirAll("/dev", 0755))
-	zero := "/dev/zero"
-	zeroDevID := unix.Mkdev(1, 5)
-	must(unix.Mknod(zero, unix.S_IFCHR|0666, int(zeroDevID)))
+	oldDev := path.Join(oldDir, "dev")
+	must(unix.Mount(oldDev, "/dev", "", unix.MS_BIND, ""))
 }
 
 func addSelfToCgroup(cgroup string) {
