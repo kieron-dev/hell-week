@@ -9,7 +9,7 @@ import (
 )
 
 func main() {
-	cgroup := flag.String("cgroup", "", "cgroup within cpuset")
+	cgroup := flag.String("cgroup", "", "cgroup path (should start with cpuset/)")
 	cpus := flag.String("cpus", "", "CPU(s) to use, e.g. '0-3', or '1,3'")
 	flag.Parse()
 
@@ -21,7 +21,7 @@ func main() {
 }
 
 func setCPUs(cgroup, cpus string) {
-	base := path.Join("/sys/fs/cgroup/cpuset", cgroup)
+	base := path.Join("/sys/fs/cgroup", cgroup)
 	if _, err := os.Stat(base); os.IsNotExist(err) {
 		panic(err)
 	}
