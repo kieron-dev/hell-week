@@ -30,9 +30,14 @@ func makeLayeredRootFS(image, graph string) string {
 		panic(err)
 	}
 	workDir, err := ioutil.TempDir("/tmp", "work")
+	if err != nil {
+		panic(err)
+	}
 
 	data := fmt.Sprintf("lowerdir=%s,upperdir=%s,workdir=%s", image, graph, workDir)
 	must(unix.Mount("overlay", location, "overlay", 0, data))
+	os.Chown(location, 0777, -1)
+
 	return location
 }
 
