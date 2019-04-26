@@ -19,6 +19,8 @@ func main() {
 	rootFS := flag.String("rootfs", "", "root filesystem path")
 	cgroup := flag.String("cgroup", "", "cgroup")
 	volume := flag.String("volume", "", "<local-path>:<container-path>")
+	bundle := flag.String("bundle", "", "path to bundle dir (optional)")
+	id := flag.String("id", "", "container ID (optional)")
 	flag.Parse()
 	args := flag.Args()
 
@@ -32,23 +34,31 @@ func main() {
 
 	spec := buildSpec(*rootFS, *cgroup, *volume, args)
 
-	bundle, err := ioutil.TempDir("/tmp", "bundle-")
-	if err != nil {
-		panic(err)
+	bundleDir := *bundle
+	if bundleDir == "" {
+		var err error
+		bundleDir, err = ioutil.TempDir("/tmp", "bundle-")
+		if err != nil {
+			panic(err)
+		}
 	}
+	mustExist(bundleDir)
 
 	data, err := json.MarshalIndent(spec, "", "\t")
 	if err != nil {
 		panic(err)
 	}
-	err = ioutil.WriteFile(path.Join(bundle, "config.json"), data, 0644)
+	err = ioutil.WriteFile(path.Join(bundleDir, "config.json"), data, 0644)
 	if err != nil {
 		panic(err)
 	}
 
-	id := uuid.New()[:8]
+	containerID := *id
+	if containerID == "" {
+		containerID = uuid.New()[:8]
+	}
 
-	cmd := exec.Command("runc", "run", "--bundle", bundle, id)
+	cmd := exec.Command("runc", "run", "--bundle", bundleDir, containerID)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -81,4 +91,12 @@ func buildSpec(rootFS, cgroup, volume string, args []string) *specs.Spec {
 		})
 	}
 	return spec
+}
+
+func mustExist(path string) {
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		if err != nil {
+			panic(err)
+		}
+	}
 }
